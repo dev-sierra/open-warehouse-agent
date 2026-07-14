@@ -2,11 +2,70 @@
 
 Natural-language analytics over your cloud data warehouse (Snowflake, Databricks, DuckDB), answered by an open-weight model that runs on GPUs you control — spun up on demand, costing ~$0 when idle.
 
-Full build plan: see `project-plan-warehouse-agent.md` in [personal/learning plan](../learning%20plan/project-plan-warehouse-agent.md) (Phase 0 design doc — problem statement, architecture, threat model, cost model — goes here once written).
+## Problem statement
 
-## Status
+Asking your warehouse a question in plain English today usually means one of two things:
 
-Scaffolding only. No code yet.
+- **Send your schema and query context to a third-party LLM API.** Convenient, but your table names, data shapes, and query results now leave your infrastructure and pass through someone else's model.
+- **Run an open-weight model on a GPU you own.** Private, but a GPU big enough to serve an LLM costs real money whether or not anyone is asking it questions — often more per month than the warehouse itself.
+
+This project does neither. It's a small, self-hosted agent stack: a warehouse connector exposed over MCP, and an open-weight model that runs on a GPU inside *your own cloud account* — a GPU that exists only while a question is actually being answered. Prompts, schema, and query results never leave infrastructure you control, and the expensive part of the stack costs nothing while idle.
+
+## Architecture
+
+Four components in three locations:
+
+```
+YOUR LAPTOP                              YOUR AWS ACCOUNT
+┌────────────────────────┐               ┌───────────────────────────────┐
+│ ① CLI chat (agent)     │───── (B) ───▶ │ ③ Gateway — tiny, always on   │
+│        │               │               │        │ starts / stops        │
+│       (A)              │               │        ▼                       │
+│        ▼               │               │ ④ GPU box — big, usually OFF  │
+│ ② MCP server           │               │    runs Qwen 2.5 7B via vLLM  │
+│    + warehouse adapters│               └───────────────────────────────┘
+└────────│───────────────┘
+        (C)
+         ▼
+  Snowflake / Databricks / DuckDB  — your warehouses
+```
+
+- **① CLI chat (agent host)** — you type English questions; it runs the agent loop (send conversation to model → execute any tool the model requests → repeat until answered).
+- **② MCP server (warehouse connector)** — exposes three tools (`list_tables`, `describe_table`, `run_query`); a pluggable adapter decides which warehouse they hit; enforces read-only SQL, row limits, and an audit log of every query.
+- **③ Gateway** — a tiny, always-on micro-VM. Speaks an OpenAI-compatible API, wakes the GPU on the first request, stops it after an idle timeout. Exists because something has to listen 24/7, and it must not be the expensive machine.
+- **④ GPU box** — runs vLLM serving **Qwen 2.5 7B Instruct** (chosen for reliable tool-calling; swappable for a larger Qwen variant later if quality demands it). **Stopped by default** — pennies of storage cost when off, nothing else.
+
+Arrows: **(A)** CLI → MCP server (tool execution) · **(B)** CLI → gateway → GPU (the thinking path) · **(C)** MCP server → warehouse (the data path). Every arrow stays inside infrastructure you control — that's the privacy claim. The only expensive component exists only while you're asking questions — that's the cost claim.
+
+## Threat model / privacy story
+
+What never leaves your own cloud account:
+
+- **Prompts and model output.** The model runs on a GPU you own; there is no third-party model API anywhere in the data or thinking path.
+- **Query results.** Warehouse data flows from the warehouse to the MCP server to the model, all inside your account/network — never to an external inference provider.
+- **Warehouse credentials.** Held by the MCP server/connector layer only, never passed to or through the model.
+
+What the system enforces at the boundaries:
+
+- **SELECT-only SQL.** Every query is parsed (via `sqlglot`) before execution; DML/DDL is rejected outright.
+- **Row limits and query timeouts** on every `run_query` call, to bound both cost and blast radius of a bad query.
+- **Full audit log** of every query executed, independent of the warehouse's own query history.
+- **No public ingress on the GPU box.** Its security group only accepts traffic from the gateway — vLLM is never internet-reachable.
+- **Bearer-token auth** between the CLI agent and the gateway.
+
+## Cost model
+
+- **Idle footprint: ~$8/month.** A tiny always-on gateway VM (~$3/mo) plus EBS storage for the baked AMI and model weights (~$5/mo) — the only cost when nobody is asking questions.
+- **Active cost: pay only while the GPU is running**, roughly $0.80/hr for the target instance class. A typical dev/demo month (10–20 active hours) adds roughly $8–16.
+- **Hard backstops against a forgotten GPU:** an idle reaper inside the gateway, an EventBridge scheduled auto-stop as a second line of defense, and a cloud budget alert. A misconfigured or crashed client cannot leave the GPU running indefinitely and silently burn money.
+
+## Cold-start budget
+
+The first request after idle finds the GPU stopped. That cold start — instance boot, vLLM startup, model load — is realistically **2–4 minutes**, and the user experience during that window is the product, not an afterthought:
+
+- The gateway returns a clear "warming up" signal (503 + `Retry-After`, or an SSE keep-alive) rather than hanging or timing out silently.
+- The gateway health-polls vLLM and only starts serving once the model is actually ready.
+- Reducing this window — a baked AMI with weights already on disk, quantization, faster health-check polling — is an explicit, ongoing goal of the project, not just an implementation detail to hide.
 
 ## Repo layout
 
@@ -20,3 +79,14 @@ infra/ami/              AMI bake (vLLM + model weights)
 data/                   Synthetic finance data generator + per-backend seed scripts
 tests/                  SELECT-only guards, adapter contract tests, gateway state machine
 ```
+
+## Roadmap
+
+- [ ] **Data plane** — connector protocol with a DuckDB adapter (zero-cloud-account demo path), then Snowflake; synthetic dataset generator; FastMCP server with SELECT-only enforcement and audit logging; CI with adapter contract tests.
+- [ ] **Local agent** — fully local dev loop (open-weight model served locally, e.g. via Ollama) driving the CLI chat host against the MCP server, no cloud dependency required.
+- [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups, an AMI bake with vLLM + model weights, and the gateway's start/stop lifecycle state machine with an idle reaper.
+- [ ] **Databricks adapter + polish** — Databricks SQL connector adapter against the same synthetic dataset, a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
+
+## Status
+
+Scaffolding only. No code yet.
