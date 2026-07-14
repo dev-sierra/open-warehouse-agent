@@ -12,3 +12,5 @@ infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.backup
 infra/terraform/*.tfvars
+data/*.duckdb
+data/audit.jsonl

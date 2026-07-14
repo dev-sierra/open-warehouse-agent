@@ -1,0 +1,36 @@
+[project]
+name = "open-warehouse-agent"
+version = "0.1.0"
+description = "Natural-language analytics over your cloud data warehouse, answered by an open-weight model on GPUs you control."
+authors = [
+    { name = "Luke O'Dair", email = "lukeodair398@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb",
+    "sqlglot",
+    "faker",
+    "mcp[cli]",
+]
+
+[project.optional-dependencies]
+snowflake = ["snowflake-connector-python"]
+databricks = ["databricks-sql-connector"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio>=1.4.0",
+    "ruff",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"

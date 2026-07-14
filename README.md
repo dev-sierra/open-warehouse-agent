@@ -80,13 +80,27 @@ data/                   Synthetic finance data generator + per-backend seed scri
 tests/                  SELECT-only guards, adapter contract tests, gateway state machine
 ```
 
+## Quick start
+
+Zero-cloud-account path, DuckDB only:
+
+```
+uv sync
+make demo-local   # seeds a local DuckDB warehouse, starts the MCP server over stdio
+make test         # pytest: SQL-guard tests + adapter contract tests
+make lint         # ruff
+```
+
+There's no CLI agent yet (that's Phase 2), so `make demo-local` currently just gets the MCP server running and ready for a client to attach to — see Roadmap below.
+
 ## Roadmap
 
-- [ ] **Data plane** — connector protocol with a DuckDB adapter (zero-cloud-account demo path), then Snowflake; synthetic dataset generator; FastMCP server with SELECT-only enforcement and audit logging; CI with adapter contract tests.
+- [x] **Data plane (DuckDB)** — connector protocol, DuckDB adapter, synthetic settlement dataset generator, FastMCP server with SELECT-only enforcement (`sqlglot`), row limits, and audit logging; CI running lint + adapter contract tests on every push.
+- [ ] **Data plane (Snowflake)** — adapter is written against the same protocol but untested; needs a live trial account.
 - [ ] **Local agent** — fully local dev loop (open-weight model served locally, e.g. via Ollama) driving the CLI chat host against the MCP server, no cloud dependency required.
 - [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups, an AMI bake with vLLM + model weights, and the gateway's start/stop lifecycle state machine with an idle reaper.
 - [ ] **Databricks adapter + polish** — Databricks SQL connector adapter against the same synthetic dataset, a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
 
 ## Status
 
-Scaffolding only. No code yet.
+Data plane running against DuckDB: connector protocol, DuckDB adapter, synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Snowflake adapter is scaffolded but unverified. No agent, gateway, or infra yet.
