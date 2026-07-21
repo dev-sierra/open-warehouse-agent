@@ -2,9 +2,7 @@
 
 demo-local:
 	uv run python -m data.seed_duckdb
-	@echo "Starting MCP server over stdio (Ctrl+C to stop)."
-	@echo "TODO: replace this with the CLI agent loop once Phase 2 lands (agent/)."
-	uv run python -m mcp_server
+	uv run python -m agent
 
 test:
 	uv run pytest -v
