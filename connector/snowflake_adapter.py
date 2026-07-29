@@ -1,16 +1,20 @@
 """Snowflake adapter.
 
 Requires the optional `snowflake` extra (`uv sync --extra snowflake`)
-and a Snowflake account — neither is set up in this environment yet,
-so this adapter is untested against a live warehouse. It follows the
-same contract as connector.duckdb_adapter.DuckDBConnector and is
-exercised by the same adapter contract tests once credentials exist
-(see tests/README or the project's Phase 1 notes).
+and a Snowflake account. Verified against a live trial account using
+a dedicated least-privilege service user (see infra/snowflake_bootstrap.py).
+Follows the same contract as connector.duckdb_adapter.DuckDBConnector
+and is exercised by the same adapter contract tests.
 
 Credentials are read from environment variables, never hardcoded or
 passed through the model:
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD,
-    SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_ROLE (optional)
+    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE,
+    SNOWFLAKE_DATABASE, SNOWFLAKE_ROLE (optional)
+
+Auth is key-pair by default (SNOWFLAKE_PRIVATE_KEY_PATH pointing at an
+unencrypted PKCS8 .p8 file) since the service user has no password.
+Falls back to SNOWFLAKE_PASSWORD if set, for accounts provisioned the
+older way.
 """
 
 from __future__ import annotations
@@ -18,9 +22,20 @@ from __future__ import annotations
 import os
 
 import snowflake.connector
+from cryptography.hazmat.primitives import serialization
 
 from connector.protocol import ColumnInfo, QueryResult, TableRef, TableSchema
 from connector.sql_guard import apply_row_limit, enforce_select_only
+
+
+def _load_private_key(path: str) -> bytes:
+    with open(path, "rb") as f:
+        key = serialization.load_pem_private_key(f.read(), password=None)
+    return key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
 
 
 class SnowflakeConnector:
@@ -28,14 +43,19 @@ class SnowflakeConnector:
 
     def __init__(self, database: str | None = None):
         self._database = database or os.environ["SNOWFLAKE_DATABASE"]
-        self._conn = snowflake.connector.connect(
+        connect_kwargs = dict(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
-            password=os.environ["SNOWFLAKE_PASSWORD"],
             warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
             database=self._database,
             role=os.environ.get("SNOWFLAKE_ROLE"),
         )
+        private_key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+        if private_key_path:
+            connect_kwargs["private_key"] = _load_private_key(private_key_path)
+        else:
+            connect_kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+        self._conn = snowflake.connector.connect(**connect_kwargs)
 
     def list_tables(self, schema: str | None = None) -> list[TableRef]:
         schema = schema or "PUBLIC"

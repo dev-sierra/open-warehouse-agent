@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from connector.duckdb_adapter import DuckDBConnector
@@ -23,9 +25,27 @@ def test_databricks_backend_raises_not_implemented(tmp_path):
         build_connector("databricks", db_path=str(tmp_path / "warehouse.duckdb"))
 
 
-def test_snowflake_backend_without_extra_raises_helpful_runtime_error(tmp_path):
-    # This dev environment doesn't have the optional `snowflake` extra
-    # installed, so this exercises the real ImportError fallback rather
-    # than needing to mock it.
+def test_snowflake_backend_without_extra_raises_helpful_runtime_error(tmp_path, monkeypatch):
+    # Simulate the extra not being installed regardless of what's actually
+    # in this dev environment's venv, by forcing the lazy import to fail.
+    monkeypatch.setitem(sys.modules, "connector.snowflake_adapter", None)
+    monkeypatch.setitem(sys.modules, "snowflake.connector", None)
+    monkeypatch.setitem(sys.modules, "snowflake", None)
+
     with pytest.raises(RuntimeError, match="uv sync --extra snowflake"):
         build_connector("snowflake", db_path=str(tmp_path / "warehouse.duckdb"))
+
+
+def test_snowflake_backend_returns_snowflake_connector(monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_ACCOUNT", "test-account")
+    monkeypatch.setenv("SNOWFLAKE_USER", "test-user")
+    monkeypatch.setenv("SNOWFLAKE_PASSWORD", "test-password")
+    monkeypatch.setenv("SNOWFLAKE_WAREHOUSE", "test-warehouse")
+    monkeypatch.setenv("SNOWFLAKE_DATABASE", "test-database")
+    monkeypatch.setattr("snowflake.connector.connect", lambda **kwargs: object())
+
+    from connector.snowflake_adapter import SnowflakeConnector
+
+    connector = build_connector("snowflake", db_path="unused")
+
+    assert isinstance(connector, SnowflakeConnector)
