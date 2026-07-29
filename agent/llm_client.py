@@ -4,8 +4,10 @@ Deliberately built on the `openai` SDK talking to a locally overridden
 base_url rather than a bespoke Ollama client: Ollama (and later, the
 Phase 3 AWS gateway) exposes the same OpenAI-compatible chat-completions
 API, so this module — and every request it makes — never leaves
-localhost/your own infrastructure. No OpenAI account or API key is used;
-Phase 3 swaps OWA_LLM_BASE_URL to the gateway with no code change here.
+localhost/your own infrastructure. No OpenAI account is used; pointing at
+the gateway instead of Ollama is just OWA_LLM_BASE_URL (plus
+OWA_LLM_API_KEY, to satisfy the gateway's bearer-token check) — no code
+change here.
 """
 
 from __future__ import annotations
@@ -22,7 +24,8 @@ DEFAULT_BASE_URL = "http://localhost:11434/v1"
 
 def build_client() -> AsyncOpenAI:
     base_url = os.environ.get("OWA_LLM_BASE_URL", DEFAULT_BASE_URL)
-    return AsyncOpenAI(base_url=base_url, api_key="ollama")
+    api_key = os.environ.get("OWA_LLM_API_KEY", "ollama")
+    return AsyncOpenAI(base_url=base_url, api_key=api_key)
 
 
 def model_name() -> str:

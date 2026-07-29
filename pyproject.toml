@@ -12,6 +12,7 @@ dependencies = [
     "faker",
     "mcp[cli]",
     "openai",
+    "fastapi",
 ]
 
 [project.optional-dependencies]

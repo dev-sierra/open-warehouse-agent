@@ -104,14 +104,23 @@ Override `WAREHOUSE_BACKEND=snowflake` (plus `uv sync --extra snowflake` and the
 see `mcp_server/backends.py`. The Snowflake adapter is written but not yet
 verified against a live account.
 
+To try the gateway locally (`gateway/`) — the OpenAI-compatible proxy that will
+eventually front the real AWS GPU box — run `make gateway` in one terminal
+(needs `OWA_GATEWAY_TOKEN` set), then point the CLI agent at it instead of
+Ollama directly: `OWA_LLM_BASE_URL=http://127.0.0.1:8000/v1 OWA_LLM_API_KEY=<same
+token> uv run python -m agent`. There's no real GPU to start/stop yet, so the
+gateway wakes a `FakeGPUBackend` that simulates the cold-start timing and then
+proxies real requests to your local Ollama server — see `gateway/fake_backend.py`.
+
 ## Roadmap
 
 - [x] **Data plane (DuckDB)** — connector protocol, DuckDB adapter, synthetic settlement dataset generator, FastMCP server with SELECT-only enforcement (`sqlglot`), row limits, and audit logging; CI running lint + adapter contract tests on every push.
 - [ ] **Data plane (Snowflake)** — adapter is written against the same protocol but untested; needs a live trial account.
 - [x] **Local agent** — fully local dev loop: CLI chat host (`agent/`) driving the MCP server via an open-weight model served locally through Ollama, no cloud dependency required.
-- [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups, an AMI bake with vLLM + model weights, and the gateway's start/stop lifecycle state machine with an idle reaper.
+- [x] **Gateway service** — FastAPI OpenAI-compatible proxy (`gateway/`) with the start/stop lifecycle state machine, idle reaper, health-polling, bearer-token auth, and the "warming up" (503 + `Retry-After`) cold-start response, built against a `ComputeBackend` protocol so a real AWS-backed implementation can swap in later with no changes to the app or state machine. Currently wired to a `FakeGPUBackend` that simulates cold-start timing — no real GPU yet.
+- [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups, an AMI bake with vLLM + model weights, and a real EC2-backed `ComputeBackend` to replace the fake one.
 - [ ] **Databricks adapter + polish** — Databricks SQL connector adapter against the same synthetic dataset, a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
 
 ## Status
 
-Data plane running against DuckDB: connector protocol, DuckDB adapter, synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Snowflake adapter is scaffolded but unverified. Databricks adapter not yet started. Local agent working end-to-end: CLI chat host + tool-calling loop against a local Ollama server, with test coverage on the loop, LLM wire-format translation, and MCP client. No gateway or infra yet.
+Data plane running against DuckDB: connector protocol, DuckDB adapter, synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Snowflake adapter is scaffolded but unverified. Databricks adapter not yet started. Local agent working end-to-end: CLI chat host + tool-calling loop against a local Ollama server, with test coverage on the loop, LLM wire-format translation, and MCP client. Gateway service working locally end-to-end (CLI → gateway → simulated GPU → Ollama), with test coverage on the state machine and the proxy app — but its `ComputeBackend` is a local fake; no real AWS infra (Terraform/AMI/EC2) yet.

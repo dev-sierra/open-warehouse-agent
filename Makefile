@@ -1,8 +1,11 @@
-.PHONY: demo-local up demo-cloud down test lint
+.PHONY: demo-local gateway up demo-cloud down test lint
 
 demo-local:
 	uv run python -m data.seed_duckdb
 	uv run python -m agent
+
+gateway:
+	uv run python -m gateway
 
 test:
 	uv run pytest -v
