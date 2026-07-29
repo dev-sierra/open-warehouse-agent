@@ -82,25 +82,36 @@ tests/                  SELECT-only guards, adapter contract tests, gateway stat
 
 ## Quick start
 
-Zero-cloud-account path, DuckDB only:
+Zero-cloud-account path, DuckDB + a locally-served open-weight model via [Ollama](https://ollama.com):
 
 ```
+ollama serve                        # if not already running
+ollama pull qwen2.5:7b-instruct     # one-time model pull
+
 uv sync
-make demo-local   # seeds a local DuckDB warehouse, starts the MCP server over stdio
+make demo-local   # seeds a local DuckDB warehouse, then runs the CLI chat agent
 make test         # pytest: SQL-guard tests + adapter contract tests
 make lint         # ruff
 ```
 
-There's no CLI agent yet (that's Phase 2), so `make demo-local` currently just gets the MCP server running and ready for a client to attach to — see Roadmap below.
+`make demo-local` seeds `data/warehouse.duckdb` and drops you into an interactive
+chat prompt (`agent/cli.py`) that spawns the MCP server as a subprocess and talks
+to Ollama over an OpenAI-compatible API — ask it questions about the seeded
+orders/settlements data. Ctrl-D to quit.
+
+Override `WAREHOUSE_BACKEND=snowflake` (plus `uv sync --extra snowflake` and the
+`SNOWFLAKE_*` env vars) to point the MCP server at Snowflake instead of DuckDB —
+see `mcp_server/backends.py`. The Snowflake adapter is written but not yet
+verified against a live account.
 
 ## Roadmap
 
 - [x] **Data plane (DuckDB)** — connector protocol, DuckDB adapter, synthetic settlement dataset generator, FastMCP server with SELECT-only enforcement (`sqlglot`), row limits, and audit logging; CI running lint + adapter contract tests on every push.
 - [ ] **Data plane (Snowflake)** — adapter is written against the same protocol but untested; needs a live trial account.
-- [ ] **Local agent** — fully local dev loop (open-weight model served locally, e.g. via Ollama) driving the CLI chat host against the MCP server, no cloud dependency required.
+- [x] **Local agent** — fully local dev loop: CLI chat host (`agent/`) driving the MCP server via an open-weight model served locally through Ollama, no cloud dependency required.
 - [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups, an AMI bake with vLLM + model weights, and the gateway's start/stop lifecycle state machine with an idle reaper.
 - [ ] **Databricks adapter + polish** — Databricks SQL connector adapter against the same synthetic dataset, a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
 
 ## Status
 
-Data plane running against DuckDB: connector protocol, DuckDB adapter, synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Snowflake adapter is scaffolded but unverified. No agent, gateway, or infra yet.
+Data plane running against DuckDB: connector protocol, DuckDB adapter, synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Snowflake adapter is scaffolded but unverified. Databricks adapter not yet started. Local agent working end-to-end: CLI chat host + tool-calling loop against a local Ollama server, with test coverage on the loop, LLM wire-format translation, and MCP client. No gateway or infra yet.
