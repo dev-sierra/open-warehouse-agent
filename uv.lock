@@ -743,6 +743,7 @@ name = "open-warehouse-agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "duckdb" },
     { name = "faker" },
     { name = "fastapi" },
@@ -768,6 +769,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3" },
     { name = "databricks-sql-connector", marker = "extra == 'databricks'" },
     { name = "duckdb" },
     { name = "faker" },

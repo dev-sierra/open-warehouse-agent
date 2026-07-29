@@ -13,6 +13,7 @@ dependencies = [
     "mcp[cli]",
     "openai",
     "fastapi",
+    "boto3",
 ]
 
 [project.optional-dependencies]
