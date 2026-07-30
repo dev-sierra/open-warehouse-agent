@@ -755,6 +755,7 @@ dependencies = [
 [package.optional-dependencies]
 databricks = [
     { name = "databricks-sql-connector" },
+    { name = "httpx" },
 ]
 snowflake = [
     { name = "snowflake-connector-python" },
@@ -774,6 +775,7 @@ requires-dist = [
     { name = "duckdb" },
     { name = "faker" },
     { name = "fastapi" },
+    { name = "httpx", marker = "extra == 'databricks'" },
     { name = "mcp", extras = ["cli"] },
     { name = "openai" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'" },

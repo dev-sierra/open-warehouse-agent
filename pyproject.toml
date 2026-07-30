@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 snowflake = ["snowflake-connector-python"]
-databricks = ["databricks-sql-connector"]
+databricks = ["databricks-sql-connector", "httpx"]
 
 [dependency-groups]
 dev = [

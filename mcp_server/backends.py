@@ -15,11 +15,10 @@ SUPPORTED_BACKENDS = ("duckdb", "snowflake", "databricks")
 def build_connector(backend: str, *, db_path: str) -> WarehouseConnector:
     """Construct the connector for one backend name.
 
-    "duckdb" is always available. "snowflake" imports
-    connector.snowflake_adapter lazily, so the optional `snowflake` extra
-    only needs to be installed when this backend is actually selected — a
-    missing extra is caught and re-raised with the `uv sync --extra
-    snowflake` fix. "databricks" has no adapter yet (see README roadmap).
+    "duckdb" is always available. "snowflake" and "databricks" import
+    their adapters lazily, so the optional extra only needs to be
+    installed when that backend is actually selected -- a missing extra
+    is caught and re-raised with the relevant `uv sync --extra ...` fix.
     """
     if backend == "duckdb":
         return DuckDBConnector(db_path)
@@ -36,9 +35,16 @@ def build_connector(backend: str, *, db_path: str) -> WarehouseConnector:
         return SnowflakeConnector()
 
     if backend == "databricks":
-        raise NotImplementedError(
-            "the databricks backend has no adapter yet — see README roadmap"
-        )
+        try:
+            from connector.databricks_adapter import DatabricksConnector
+        except ImportError as e:
+            raise RuntimeError(
+                "the databricks backend requires the optional `databricks` "
+                "extra — run `uv sync --extra databricks` and set "
+                "DATABRICKS_SERVER_HOSTNAME/HTTP_PATH/CATALOG plus either "
+                "CLIENT_ID+CLIENT_SECRET or TOKEN"
+            ) from e
+        return DatabricksConnector()
 
     raise ValueError(
         f"unknown backend {backend!r} — supported backends: {', '.join(SUPPORTED_BACKENDS)}"

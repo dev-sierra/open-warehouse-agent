@@ -106,6 +106,11 @@ key-pair by default (see `infra/snowflake_bootstrap.py` for one-time
 account setup); run `data/seed_snowflake.py` to seed the same synthetic
 dataset.
 
+Same idea for `WAREHOUSE_BACKEND=databricks` (`uv sync --extra databricks`,
+`DATABRICKS_*` env vars). Auth is OAuth client-credentials via a scoped
+service principal by default (see `infra/databricks_bootstrap.py` for
+one-time catalog/schema setup); run `data/seed_databricks.py` to seed.
+
 To try the gateway locally (`gateway/`) — the OpenAI-compatible proxy that will
 eventually front the real AWS GPU box — run `make gateway` in one terminal
 (needs `OWA_GATEWAY_TOKEN` set), then point the CLI agent at it instead of
@@ -121,8 +126,9 @@ proxies real requests to your local Ollama server — see `gateway/fake_backend.
 - [x] **Local agent** — fully local dev loop: CLI chat host (`agent/`) driving the MCP server via an open-weight model served locally through Ollama, no cloud dependency required.
 - [x] **Gateway service** — FastAPI OpenAI-compatible proxy (`gateway/`) with the start/stop lifecycle state machine, idle reaper, health-polling, bearer-token auth, and the "warming up" (503 + `Retry-After`) cold-start response, built against a `ComputeBackend` protocol so a real AWS-backed implementation can swap in later with no changes to the app or state machine. Currently wired to a `FakeGPUBackend` that simulates cold-start timing — no real GPU yet.
 - [ ] **AWS inference plane** — Terraform for the VPC/gateway/GPU instance/IAM/security groups ✅, an AMI bake with vLLM + model weights, and a real EC2-backed `ComputeBackend` to replace the fake one ✅ (written, unit-tested against a fake AWS client via `OWA_GATEWAY_BACKEND=ec2`; not yet verified against a live instance — the GPU instance and AMI bake are both still blocked on a pending AWS GPU vCPU quota increase).
-- [ ] **Databricks adapter + polish** — Databricks SQL connector adapter against the same synthetic dataset, a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
+- [x] **Databricks adapter** — verified end-to-end against a live trial workspace on AWS: OAuth client-credentials auth via a scoped service principal (Databricks' built-in connector auth is Azure-only, so `connector/databricks_adapter.py` talks to the OIDC token endpoint directly), Unity Catalog catalog/schema + grants via `infra/databricks_bootstrap.py`, seeded via `data/seed_databricks.py`, passing the full adapter contract test suite (`tests/test_databricks_adapter.py`, live-gated on `DATABRICKS_SERVER_HOSTNAME`).
+- [ ] **Polish** — a recorded end-to-end demo (question → GPU wakes → answer → GPU sleeps).
 
 ## Status
 
-Data plane running against DuckDB and Snowflake: connector protocol, DuckDB adapter, Snowflake adapter (key-pair auth, scoped least-privilege role, verified end-to-end against a live trial account), synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Databricks adapter not yet started. Local agent working end-to-end: CLI chat host + tool-calling loop against a local Ollama server, with test coverage on the loop, LLM wire-format translation, and MCP client. Gateway service working locally end-to-end (CLI → gateway → simulated GPU → Ollama), with test coverage on the state machine and the proxy app. AWS infra (VPC, gateway instance, IAM, budget alert) is applied and confirmed working; the real EC2-backed `ComputeBackend` (`gateway/ec2_backend.py`) is written and unit-tested, but the GPU instance itself and the AMI bake are both blocked on a pending AWS GPU vCPU quota increase, so it hasn't been exercised against a live instance yet.
+Data plane running against DuckDB, Snowflake, and Databricks: connector protocol, DuckDB adapter, Snowflake adapter (key-pair auth, scoped least-privilege role), Databricks adapter (OAuth client-credentials via a scoped service principal, Unity Catalog grants) — both cloud adapters verified end-to-end against live trial accounts — synthetic dataset generator, FastMCP server, and a passing CI-tested pytest suite. Local agent working end-to-end: CLI chat host + tool-calling loop against a local Ollama server, with test coverage on the loop, LLM wire-format translation, and MCP client. Gateway service working locally end-to-end (CLI → gateway → simulated GPU → Ollama), with test coverage on the state machine and the proxy app. AWS infra (VPC, gateway instance, IAM, budget alert) is applied and confirmed working; the real EC2-backed `ComputeBackend` (`gateway/ec2_backend.py`) is written and unit-tested, but the GPU instance itself and the AMI bake are both blocked on a pending AWS GPU vCPU quota increase, so it hasn't been exercised against a live instance yet.
